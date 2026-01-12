@@ -1,3 +1,4 @@
+% !TEX program = xelatex
 %---------------------------------------------------------------------------%
 %-                                                                         -%
 %-                           LaTeX Template                                -%
@@ -41,6 +42,12 @@
 %- [list]% provide enhanced list environments for algorithm and coding
 %- [math]% enable some extra math packages
 %- [xlink]% disable link colors
+\usepackage{tabularx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\renewcommand{\algorithmicrequire}{\textbf{输入:}}
+\renewcommand{\algorithmicensure}{\textbf{输出:}}
+\renewcommand{\algorithmicreturn}{\textbf{返回}}
 \usepackage{Style/artracom}% user defined commands
 %---------------------------------------------------------------------------%
 %->> Document inclusion

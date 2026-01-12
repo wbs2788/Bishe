@@ -211,13 +211,13 @@ Thesis.tex为主文档，其设计和规划了论文的整体框架，通过对�
 
 1）将Bib格式的参考文献信息添加到ref.bib文件中（此文件位于Biblio文件夹下），如直接粘贴自网站，请注意修改其格式。
 
-2）索引第一行 \verb|@article{lamport1986document,|中 \verb|lamport1986document| 即为此文献的label (中文文献也必须使用英文label，一般遵照：姓氏拼音+年份+标题第一字拼音的格式)，想要在论文中索引此文献,\verb|\citep{lamport1986document}|。如此处所示 $^{\citep{lamport1986document}}$。
+2）索引第一行 \verb|@article{lamport1986document,|中 \verb|lamport1986document| 即为此文献的label (中文文献也必须使用英文label，一般遵照：姓氏拼音+年份+标题第一字拼音的格式)，想要在论文中索引此文献,\verb|\citep{lamport1986document}|。如此处所示 {\citep{lamport1986document}}。
 
-多文献索引用英文逗号隔开, 如此处所示 $^{\citep{lamport1986document, chu2004tushu, chen2005zhulu}}$。
+多文献索引用英文逗号隔开, 如此处所示 {\citep{lamport1986document, chu2004tushu, chen2005zhulu}}。
 
 更多例子如：
 
-Walls等$^{\citep{walls2013drought} }$根据Betts$^{\citep{betts2005aging}}$ 的研究，首次提出......理论。其中关于......的研究$^{\citepns{walls2013drought, betts2005aging}}$，是当前中国得到迅速发展的研究领域 $^{\citep{chen1980zhongguo, bravo1990comparative}}$。
+Walls等{\citep{walls2013drought} }根据Betts{\citep{betts2005aging}} 的研究，首次提出......理论。其中关于......的研究{\citepns{walls2013drought, betts2005aging}}，是当前中国得到迅速发展的研究领域 {\citep{chen1980zhongguo, bravo1990comparative}}。
 
 不同文献样式和引用样式，如著者-出版年制（authoryear）、顺序编码制（numbers）、上标顺序编码制（super）可在Thesis.tex中对artratex.sty调用实现，详见 \href{https://github.com/mohuangrui/ucasthesis/wiki}{ucasthesis 知识小站之文献样式}。
 

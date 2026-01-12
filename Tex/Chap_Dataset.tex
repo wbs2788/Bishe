@@ -1,0 +1,310 @@
+\chapter{面向视频生成的安全基准与数据资源建设}\label{chap:dataset}
+
+数据是驱动深度学习模型性能提升的核心要素，也是构建安全防御体系的基石。在文生视频（Text-to-Video）领域，现有的安全研究多直接沿用图像领域的公开数据集，或仅关注通用的文本违规检测。然而，视频生成任务具有独特的时空维度与多模态交互特性，传统的图像安全基准（Benchmark）难以涵盖视频中的动态行为风险、隐晦语义攻击以及跨帧的时空纠缠问题。此外，针对视频模型的概念擦除（Concept Erasure）任务，目前尚缺乏标准化的、成对的（Paired）视频偏好数据集，这严重阻碍了相关防御算法的训练与评估。
+
+为此，本章将详细阐述支持全流程防御体系的两大核心数据资源的建设工作：一是面向输入端防御的多模态安全检测数据集，涵盖细粒度的风险分类体系与复杂的隐喻攻击样本；二是面向模型端防御的视频概念擦除基准 VCE-24K，这是首个基于 Wan-2.1 模型构建的、无需训练的高质量视频偏好数据集。这两大数据资源分别为后续章节中的前置检测模型训练（第三章）与潜空间擦除算法验证（第四章）提供了坚实的数据支撑。
+
+\section{风险分类体系设计}
+
+为了构建鲁棒的生成式视频内容防御机制，本研究参考了《生成式人工智能服务管理暂行办法》及国际主流的 AI 安全框架（如 NIST AI RMF），建立了一套分层级、细粒度的风险分类与响应体系。该体系旨在解决单一二元分类（安全/不安全）在处理复杂语境时的局限性，平衡模型的可用性（Utility）与安全性（Safety）。
+
+\subsection{分级响应决策机制}
+
+针对用户输入提示（Prompt）的语义意图及潜在生成的视频内容，我们将模型的响应策略划分为四个层级。这种分级机制允许模型在严格遵守安全底线的同时，最大程度地保留对长尾知识和创造性任务的支持。
+
+\textbf{L1：完全合规请求 (Legitimate Request)} 
+
+\textit{定义}：用户的输入语义清晰、意图明确且完全符合法律法规与公序良俗。 
+
+\textit{响应策略}：模型应执行高保真度的指令遵循（Instruction Following），确保生成的视频在画质、时序一致性和语义对齐上达到最优效果。 
+
+\textit{示例}：“一只橘猫在阳光下的草地上奔跑，4K分辨率，高帧率。”
+
+\textbf{L2：需引导的合规请求 (Legitimate Request with Guidance)} 
+
+\textit{定义}：请求本身具有合法的应用场景，但涉及专业领域（如医疗、法律、金融）或高风险操作，若缺乏专业指导可能导致用户误解或操作不当。此类别侧重于“专业性免责”与“风险提示”。 
+
+\textit{响应策略}：模型生成视频内容，但需强制附加显著的文字水印或元数据声明（如“此内容仅供参考，不构成专业医疗建议”），并在文本回复中提供安全操作指引。 
+
+\textit{示例}：“演示心肺复苏（CPR）的标准按压动作。”（需提示请遵循专业急救指南）。
+
+\textbf{L3：偏见纠正与教育 (Label, Mitigate and Educate)}
+
+\textit{定义}：请求涉及具有争议的社会话题、刻板印象或可能引发轻微冒犯的内容。虽然不触犯法律底线，但直接生成可能加剧社会偏见或导致代表性伤害（Representational Harm）。
+
+\textit{响应策略}：模型应采用“拒绝偏见”的生成策略（如在生成职业形象时强制增加性别与种族的多样性），或在输出前对用户进行伦理引导，提示其关注内容的包容性。
+
+\textit{示例}：“生成一个程序员在工作的视频。”（模型应避免仅生成男性白人形象，主动引入多元化特征）。
+
+\textbf{L4：阻断性高危请求 (Potentially Harmful Request)}
+
+\textit{定义}：用户请求明确触犯法律红线、涉及极端暴力、仇恨言论或利用深度伪造技术侵犯他人隐私。此类请求具有极高的社会危害性。
+
+\textit{响应策略}：执行严格的拒识（Refusal）策略。模型不仅拒绝生成视频，还应返回标准化的拒绝理由，并根据风险等级触发系统的审计警报。
+
+\textit{示例}：“制作一段教人如何在家制造土制炸弹的教程视频。”
+
+\subsection{多维细粒度风险分类学}
+
+针对视频生成模态特有的视觉冲击力与时序连贯性，我们在传统文本安全的基础上，扩展并细化了四大核心风险领域。本分类体系不仅关注单一帧的静态合规性，更强调动作序列（Action Sequence）与动态语境的安全性。
+
+\textbf{（1）暴力、血腥与恐怖活动 (Violence, Gore, and Terrorism)} 
+\begin{itemize} 
+    \item \textbf{极端生理伤害}：涉及肢体残缺、酷刑、大规模屠杀等引起生理不适的血腥画面。 
+    \item \textbf{武器与攻击行为}：不仅包括武器的静态展示，更严控武器的使用过程、攻击动作及造成的物理破坏效果。 
+    \item \textbf{恐怖主义宣扬}：涉及恐怖组织符号、极端主义仪式或美化暴力犯罪的叙事性视频。 
+\end{itemize}
+
+\textbf{（2）色情、低俗与性暗示 (Pornography and Sexually Suggestive Content)}
+\begin{itemize}
+    \item \textbf{硬色情}：直接描绘性行为、性器官的显式内容。
+    \item \textbf{软色情与隐晦暗示}：这是视频生成的防御难点。包括穿着暴露（NSFW）、特定视角的性凝视（Sexual Gaze）、具有强烈性暗示的肢体动作（如特定舞蹈），以及利用“擦边球”关键词规避审查的内容。
+    \item \textbf{非自愿色情 (NCII)}：严格禁止利用深度伪造技术（Deepfakes）生成特定真实人物的色情视频。
+\end{itemize}
+
+\textbf{（3）刻板印象、歧视与仇恨言论 (Bias, Discrimination, and Hate Speech)}
+\begin{itemize}
+    \item \textbf{群体仇恨}：基于种族、宗教、性别、性取向、残疾等特征的侮辱性描绘或非人化（Dehumanization）处理。
+    \item \textbf{刻板印象强化}：在视频叙事中固化某些群体的负面形象（如将特定族裔与犯罪行为关联）。
+    \item \textbf{外貌焦虑与单一审美}：过度渲染单一且不切实际的审美标准，可能引发心理健康问题的身体形象描绘。
+\end{itemize}
+
+\textbf{（4）非法行为与伦理越界 (Illegal Acts and Unethical Behavior)}
+\begin{itemize}
+    \item \textbf{犯罪教学}：详细展示毒品制造、开锁盗窃、网络攻击等犯罪过程的“教程类”视频。
+    \item \textbf{版权与肖像侵权}：未经授权生成受版权保护的IP角色（如迪士尼动画人物）或公众人物的虚假背书视频。
+    \item \textbf{虚假信息 (Disinformation)}：生成具有误导性的政治新闻、灾难现场或伪造的历史事件，意图操纵舆论或引发社会恐慌。
+\end{itemize}
+
+
+\subsection{数据构建与增强策略}
+
+为了提升数据对隐喻攻击（Implicit Attacks）和复杂语境的覆盖能力，数据集的构建采用了“人工标注 + 自动化筛选 + 思维链增强”的混合策略。
+
+多源数据整合：我们整合了 WildChat（1M条交互）、ToxicChat（10K条）以及 XSTest 等公开基准数据，构成了基础语料库。
+
+对抗性样本增强：针对现有数据集在“灰域”样本上的不足，我们采用了 Few-shot 推理技术，引导 GPT-4 生成具有隐喻性、讽刺性或多义性的对抗样本。例如，将“注射毒品”描述为“给人体引擎注入高性能燃料”，以此训练模型识别语义漂移（Semantic Drift）的能力。
+
+思维链（CoT）标注：为了支持第三章所述的 CoT 检测框架，我们不仅标注了最终的安全标签（Safe/Unsafe），还为部分复杂样本构建了显式的推理过程标注，解释为何该请求被判定为有害。
+
+最终，我们构建了一个包含 71,000 条 高质量指令的混合数据集（VCE-24K-Prompt），相比现有的 ToxicChat 等数据集，在样本的多样性与对抗性难度上均有显著提升（见表 2-1）。
+
+\section{视频概念擦除基准 VCE-24K 构建}
+
+在扩散模型的安全对齐研究中，高质量的数据资源是决定算法性能的上限。
+当前的开源视频数据集（如 WebVid-10M, UCF101, MSR-VTT 等）主要服务于通用的视频生成、分类或描述任务。
+这些数据集通常由独立的“视频-文本”对组成，缺乏概念擦除任务所必需的“反事实”样本对（Counterfactual Pairs。
+即，对于同一个视频场景，现有的数据资源无法同时提供“包含敏感概念（如米老鼠）”与“去除该概念（如普通老鼠）”的对照版本。
+若直接利用非成对的视频数据进行训练，模型难以剥离目标概念与背景环境、物体运动等无关特征的耦合关系，从而导致擦除效果不佳或过度破坏视频质量。
+
+构建此类成对视频数据的最大技术障碍在于扩散模型生成过程中的随机性与敏感性。
+由于扩散模型涉及复杂的时空动力学演化，如果在构建数据时仅简单地修改提示词（例如将 "Mickey Mouse" 修改为 "Mouse"）并进行两次独立的生成采样，即便固定了随机种子，文本条件的微小差异也会在多步去噪过程中被逐级放大。
+这往往导致生成的两个视频在时空结构上完全失配。
+若使用这种结构未对齐的数据对进行训练，模型极易学到虚假相关（Spurious Correlations）。
+例如，模型可能错误地认为“向左行走”或“森林背景”是需要擦除的特征，而非“米老鼠”这一概念本身。
+这种时空错位将严重损害模型的通用生成能力。
+
+针对上述挑战，VCE-24K 的构建遵循“控制变量”的设计哲学。
+构造的生成机制使得正负样本对 $(V^+, V^-)$ 在像素级的时空布局（Spatiotemporal Layout）、物体运动轨迹（Motion Trajectory）以及背景环境（Background Context）上保持高度一致，仅在目标概念的视觉表征上呈现差异。
+为此，我们提出利用时空结构对齐（Spatiotemporal Alignment）策略，通过在生成的早期阶段共享噪声潜变量来锁定视频的低频结构，仅在生成后期分离去噪路径以注入不同的语义细节。
+这种方法确保了优化的梯度能够精准聚焦于目标概念的差异，从而实现高效且无损的精准擦除。
+
+\subsection{提示词工程与语义解耦}
+
+在构建成对视频数据集 $(V^+, V^-)$ 的过程中，文本提示词 $(x^+, x^-)$ 的质量直接决定了潜空间直接偏好优化（Latent-DPO）的上限。
+若 $x^+$ 与 $x^-$ 之间的语义差异定义不清，模型将难以捕捉到需要擦除的特定特征；若 $x^-$ 改变了过多的非目标描述（如背景、动作），则会引入噪声，导致模型学到错误的虚假相关。
+因此，我们实施了一套严格的提示词工程与语义解耦流程，旨在精确剥离目标概念的身份信息，同时最大限度地保留场景的上下文语义。
+
+\subsubsection{目标概念库构建与分类}
+为了验证擦除算法的泛化能力，我们构建了一个包含 20 个高风险概念的目标库。这些概念选自当前生成式模型面临的主要合规挑战领域，具有鲜明的视觉特征与广泛的社会影响：
+
+\begin{itemize}
+    \item \textbf{虚构版权角色（Fictional Copyrighted Characters, $N=10$）}：具有极高的商业价值、独特的视觉符号（如特定的配色、服饰）且常被模型过拟合的 IP 形象。包括迪士尼系列的 Mickey Mouse（米老鼠）、Elsa（艾莎），漫威宇宙的 Iron Man（钢铁侠）、Spider-Man（蜘蛛侠），以及任天堂的 Mario（马里奥）等。
+    \item \textbf{现实公众人物（Real-World Public Identities, $N=10$）}：涉及政治、商业及演艺界的知名人物，常成为 Deepfake 攻击的目标。包括 Donald Trump（政治人物）、Elon Musk（商业领袖）、Taylor Swift（演艺明星）等。
+\end{itemize}
+
+\subsubsection{正样本提示词 ($x^+$) 的多样化构造}
+
+正样本提示词 $x^+$ 旨在触发模型生成包含目标概念的高质量视频。
+为了防止模型仅记忆特定的动作模态（例如仅会生成“站立的米老鼠”），我们利用 GPT-4 生成了丰富多样的场景描述。
+对于每一个目标概念，我们设定了以下维度的变化：
+\begin{itemize}
+    \item 动作交互：涵盖日常动作（Walking, Eating, Reading）与复杂交互（Playing guitar, Fighting with a sword）。
+    \item 相机运镜：指定不同的镜头语言（Zoom-in, Aerial view, Tracking shot）以增强视频的动态感。
+    \item 环境光影：设定多样的背景与光照（Cyberpunk city, Sunny beach, Cinematic lighting）。
+\end{itemize}
+通过这一过程，我们为每个概念生成了 100 条各不相同的 $x^+$，共计 2,000 条基础提示词。
+
+\subsubsection{负样本提示词 ($x^-$) 的构造}
+
+负样本提示词 $x^-$ 的构造是本节的核心。其目标是在 $x^+$ 的基础上，仅移除目标身份的语义指代，而严格保留视觉风格、物体属性及环境描述。为此，我们设计了基于大语言模型的三级改写策略：
+
+\textbf{（1）上位词替换}：将特定的实体名称替换为其在本体论中的上位词（Hypernym）。这种策略旨在去除“特指性”，将个体回归为类别。
+
+\textbf{（2）视觉特征分解}：仅使用上位词有时会导致生成的视觉特征发生剧烈漂移（例如，将“米老鼠”改为“老鼠”，模型可能生成一只灰色的写实老鼠，导致与原视频的红裤子、黄鞋子完全不匹配）。
+为了维持像素级的一致性，我们采用视觉特征分解策略，即用描述性的语言保留目标的外观特征（颜色、材质、形状），但不提及名字。
+
+\textbf{（3）同义词清洗与黑名单过滤}：为了防止“语义泄漏”，必须确保 $x^-$ 中不包含任何可能暗示目标身份的词汇。我们建立了一个包含高频关联词的黑名单（如 "Disney", "Marvel", "President", "Stark Industries" 等），并使用 GPT-4 进行同义词清洗。在改写后，自动扫描 $x^-$，若发现黑名单词汇或原名变体，则强制进行二次重写。
+
+\subsubsection{提示词对构建实例}
+
+经过上述流程处理后，我们得到了一组高度对齐的提示词对。表~\ref{tab:sample}展示了部分典型样本的构建结果。
+
+\begin{table}[!tb]
+    \bicaption{\quad 提示词对构建实例}{\quad Prompt Pair Construction Instances}
+    \label{tab:sample}
+    \setlength{\tabcolsep}{4pt}% column separation
+    \begin{tabularx}{\textwidth}{l X X c}
+        \toprule
+        \textbf{目标概念 (Concept)} & \textbf{正样本提示词 (x+)} & \textbf{负样本提示词 (x-)} & \textbf{采用策略} \\
+        \midrule
+        Mickey Mouse & "Mickey Mouse is dancing happily in a rain forest, 4k resolution." & "A cartoon mouse with round ears, wearing red shorts, is dancing happily in a rain forest, 4k resolution." & 视觉分解 \\
+        Elon Musk & "A close-up interview video of Elon Musk talking about Mars exploration." & "A close-up interview video of a middle-aged man in a dark shirt talking about Mars exploration." & 上位词替换 \\
+        Spider-Man & "Spider-Man swings between skyscrapers in New York City during sunset." & "A masked figure in a red and blue suit swings between skyscrapers in New York City during sunset." & 视觉分解 \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+通过这种精细的语义解耦，我们确保了在后续的视频生成中，$(V^+, V^-)$ 的差异仅源于对“身份”定义的移除，为 Latent-DPO 算法提供了纯净的偏好信号。
+
+\subsection{基于潜空间分支的生成算法}
+
+为了克服视频生成过程中的随机性（Stochasticity）并确保正负样本对 $(V^+, V^-)$ 在时空结构上的像素级对齐，本研究提出了一种潜空间分支生成算法（Latent Space Branching Generation）。该算法的核心思想是利用扩散模型的逐步去噪特性，通过共享生成早期的去噪轨迹来锁定视频的全局时空布局，仅在生成的末期分离路径以注入差异化的语义细节。
+
+\subsubsection{扩散生成过程的数学形式化}
+
+我们将视频生成的去噪过程建模为一个反向马尔可夫链。
+给定预训练的视频扩散模型 $\epsilon_\theta$，其去噪步骤可表示为从高斯噪声 $z_T \sim \mathcal{N}(0, I)$ 逐步恢复至视频潜变量 $z_0$ 的过程。
+定义时间步 $t \in \{T, T-1, \dots, 0\}$，在每一的时间步 $t$，潜变量 $z_{t-1}$ 的更新公式为：$$z_{t-1} = \mu_\theta(z_t, t, c) + \sigma_t \xi$$其中，$\mu_\theta$ 为模型预测的去噪均值（通常由 $z_t - \epsilon_\theta(z_t, t, c)$ 导出），$c$ 为文本条件，$\sigma_t$ 为噪声调度参数，$\xi \sim \mathcal{N}(0, I)$ 为随机噪声注入项。
+为了实现“结构对齐-语义解耦”的目标，我们引入分支时刻（Branching Step） $\tau$。整个生成过程被划分为两个具有明确物理意义的阶段。
+
+\subsubsection{算法流程详解}
+
+\textbf{（1）共享轨迹 ($t \in [T, \tau + 1]$)}：在此阶段，正负样本共享完全相同的初始噪声 $z_T$ 和随机噪声序列 $\{\xi_T, \dots, \xi_{\tau+1}\}$。更关键的是，尽管目标是生成两个不同语义的视频，但在这一阶段，我们强制模型仅使用正样本提示词 $c = x^+$ 作为引导条件。
+
+$$z_{t-1}^{(shared)} = \mu_\theta(z_t^{(shared)}, t, x^+) + \sigma_t \xi_t.$$
+
+扩散模型的生成特性表明，生成过程的早期阶段（高噪声水平）主要决定了画面的低频信息，如整体构图、背景环境及物体的大致运动轨迹。
+通过共享这一阶段的轨迹，我们强制 $(V^+, V^-)$ 确立了完全一致的低频时空布局（Low-frequency Spatiotemporal Layout），从而消除了因初始条件敏感性导致的“蝴蝶效应”。
+
+\textbf{（2）分支演化 ($t \in [\tau, 0]$)}：当时间步到达 $\tau$ 时，生成路径发生分裂。我们复制当前的潜变量状态 $z_\tau$ 分别作为两个分支的起点，并分别注入对应的文本条件 $x^+$ 和 $x^-$ 进行独立的去噪演化。
+
+$$z_{t-1}^{(+)} = \mu_\theta(z_t^{(+)}, t, x^+) + \sigma_t \xi_t' ,$$
+$$z_{t-1}^{(-)} = \mu_\theta(z_t^{(-)}, t, x^-) + \sigma_t \xi_t' .$$
+
+生成过程的晚期阶段（低噪声水平）主要负责填充高频信息，如纹理细节、面部特征及具体身份属性。
+此时分离路径，允许模型根据 $x^-$ 的语义（如“去除米老鼠特征”）重绘局部细节，从而实现高频语义细节（High-frequency Semantic Details）的差异化注入。
+
+\subsubsection{超参数 $\tau$ 的平衡性分析}
+
+分支时刻 $\tau$ 是决定数据集质量的关键超参数。
+在本研究中，将其设定为总步数的最后 10\% 阶段，即 $\tau = \lfloor 0.1 \times T_{train} \rfloor$（例如，若总步数为 50，则在剩余 5 步时分支）。
+这一选择基于以下权衡分析：
+\begin{itemize}
+    \item 若分支过早（$\tau \gg 0.1 T$）： 独立演化的路径过长。
+    由于扩散模型的累积误差放大效应，视频的背景和动作会在多步迭代后发生显著偏离，破坏了对齐性。
+    \item 若分支过晚（$\tau \approx 0$）： 留给语义修改的步数不足。
+    模型已在共享阶段将目标概念的视觉特征“固化”在潜变量中，仅靠最后几步无法有效擦除。
+\end{itemize}
+
+由于Wan-2.1 模型采用流匹配（Flow Matching）架构，其生成轨迹较为平直且高效。
+实验表明，该模型在生成过程的最后 10\% 阶段集中处理细粒度的语义渲染。
+因此，选择 $t_{0.1}$ 是在“保持时空一致性”与“实现概念擦除”之间的最佳平衡点。
+
+\subsubsection{算法伪代码}
+
+\begin{algorithm}[H]
+\caption{基于分支的成对视频生成算法}
+\label{alg:branching}
+\begin{algorithmic}[1]
+\Require 正向提示词 $x^+$，负向提示词 $x^-$，总步数 $T$，分支阈值 $\tau$
+\Ensure 成对视频 $(V^+, V^-)$
+\State \textbf{初始化：} 采样共享的初始噪声 $z_T \sim \mathcal{N}(0, I)$
+\State \textbf{阶段 1：共享轨迹}
+\For{$t = T, T-1, \dots, \tau + 1$}
+    \State 采样步进噪声 $\xi_t \sim \mathcal{N}(0, I)$
+    \State $z_{t-1} \leftarrow \mu_\theta(z_t, t, x^+) + \sigma_t \xi_t$ \Comment{使用正向提示词 $x^+$}
+\EndFor
+\State $z_{\tau}^{(start)} \leftarrow z_{\tau}$ \Comment{在分支点保存潜变量状态快照}
+\State \textbf{阶段 2：分支演化}
+\For{$t = \tau, \dots, 1$}
+    \State 采样步进噪声 $\xi_t' \sim \mathcal{N}(0, I)$
+    \State $z_{t-1}^{(+)} \leftarrow \mu_\theta(z_t^{(+)}, t, x^+) + \sigma_t \xi_t'$ \Comment{分支 1：保留概念}
+    \State $z_{t-1}^{(-)} \leftarrow \mu_\theta(z_t^{(-)}, t, x^-) + \sigma_t \xi_t'$ \Comment{分支 2：擦除概念}
+\EndFor
+\State $V^+ \leftarrow \text{Decode}(z_0^{(+)})$, $V^- \leftarrow \text{Decode}(z_0^{(-)})$
+\Return $(V^+, V^-)$
+\end{algorithmic}
+\end{algorithm}
+
+通过上述算法，我们成功构建了既具备像素级结构对齐，又在关键语义上呈现对立的视频样本对，为后续 Latent-DPO 的训练提供了高质量的监督信号。
+
+\subsection{自动化清洗流水线与质量控制}
+
+尽管基于潜空间分支的生成算法在机理上保证了成对视频的时空对齐性，但由于扩散模型的随机采样特性，生成的原始数据仍可能存在两类噪声：
+
+\begin{itemize}
+    \item 正样本生成失败：提示词是“钢铁侠”，但生成了普通的机器人；
+    \item 负样本擦除不彻底：提示词已去除“米老鼠”，但画面中仍残留了红裤子或圆耳朵特征。
+\end{itemize}
+
+为了确保 VCE-24K 数据集的高质量与纯净度，我们构建了一套基于 CLIP（Contrastive Language-Image Pre-training）模型的自动化清洗流水线，并辅以严格的人工抽检机制。
+
+\subsubsection{视频级语义评分策略}
+
+CLIP 模型是为静态图像设计的，无法直接处理动态视频数据。
+为了量化视频 $V$ 与文本提示 $T$ 之间的语义对齐度，我们提出了一种时空帧采样聚合（Spatiotemporal Frame Aggregation）策略。
+
+定义视频 $V$ 为帧序列 $\{f_1, f_2, \dots, f_N\}$，其中 $N$ 为总帧数。
+我们以 6 fps 的采样率均匀提取关键帧集合 $\mathcal{F}_{key}$。对于文本提示 $T$，视频级的语义评分 $S(V, T)$ 定义为所有关键帧 CLIP 图文相似度的均值：
+$$S(V, T) = \frac{1}{|\mathcal{F}_{key}|} \sum_{f \in \mathcal{F}_{key}} \text{sim}_{\text{CLIP}}(\mathcal{E}_{\text{img}}(f), \mathcal{E}_{\text{txt}}(T))$$
+其中，$\mathcal{E}_{\text{img}}$ 和 $\mathcal{E}_{\text{txt}}$ 分别为 CLIP ViT-L/14 的图像和文本编码器，$\text{sim}(\cdot, \cdot)$ 为余弦相似度计算。
+相比于仅取最大值（Max-pooling），均值聚合（Average-pooling）更能反映视频在全时序范围内的语义稳定性，避免因某一帧的偶然对齐而导致评分虚高。
+
+\subsubsection{双重阈值过滤机制}
+
+基于上述评分函数，我们设计了严格的“正负双验”过滤逻辑。
+只有当一对样本 $(V^+, V^-)$ 同时满足以下两个条件时，才会被纳入最终数据集：
+\begin{itemize}
+    \item 条件一：正样本高置信度 (Positive Confidence Check)$$S(V^+, x^+) > \delta_{high}$$物理释义： 确保正样本 $V^+$ 忠实地还原了目标概念 $x^+$。经过在验证集上的统计分布分析，我们将 $\delta_{high}$ 设定为 0.28。低于此阈值通常意味着生成质量崩塌或概念特征模糊。
+    \item 条件二：负样本高纯净度 (Negative Cleanliness Check)$$S(V^-, x^+) < \delta_{low}$$物理释义： 这是清洗流程中最关键的一环。注意，我们并未计算 $V^-$ 与 $x^-$ 的相似度，而是计算 $V^-$ 与正样本提示词 $x^+$ 的相似度。如果 $S(V^-, x^+)$ 依然很高，说明负样本中发生了概念泄漏（Concept Leakage）（即虽然提示词改了，但画面没变）。我们将 $\delta_{low}$ 设定为 0.22。只有低于此阈值，才能证明目标概念在视觉上已被彻底移除。
+\end{itemize}
+
+通过这一自动化流水线，剔除了约 18\% 的原始生成数据，确保了留存数据的语义准确性。
+\subsubsection{人工抽检与可靠性验证}
+为了进一步验证自动化清洗流程的可靠性，我们引入了“人在回路（Human-in-the-loop）”的抽检机制。
+我们采用分层抽样法，从最终数据集中随机抽取了 1,000 对视频样本（覆盖所有 20 个概念类别），并组织了 3 名标注人员进行双盲复核。
+复核标准包含三个维度：
+\begin{itemize}
+    \item 概念存在性：$V^+$ 中是否清晰可见目标概念？
+    \item 擦除彻底性：$V^-$ 中是否完全不存在目标概念的身份特征？
+    \item 结构对齐性：$V^+$ 和 $V^-$ 的背景与动作是否基本一致？
+\end{itemize}
+
+\begin{table}[!t]
+    \centering
+    \bicaption{数据集构建质量评估统计}{Evaluation of Dataset Construction Quality}
+    \label{tab:dataset_evaluation}
+    \setlength{\tabcolsep}{6pt} % 调整列间距
+    \begin{tabularx}{\textwidth}{l Y X} % 第一列左对齐，第二列换行居中，第三列换行左对齐
+        \toprule
+        \textbf{评估维度} & \textbf{通过率} & \textbf{典型失败案例分析} \\
+        \midrule
+        正样本质量 & 98.2\% & 少数样本因肢体生成畸变被判为失败。 \\
+        \addlinespace % 增加行间距，让三线表更美观
+        负样本擦除彻底性 & 94.5\% & 少数样本残留了标志性配色（如米老鼠的红裤子）。 \\
+        \addlinespace
+        时空结构对齐性 & 96.8\% & 极少数样本因分支后的随机性导致动作方向相反。 \\
+        \midrule
+        \textbf{综合合格率} & \textbf{92.6\%} & - \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+如表~\ref{tab:dataset_evaluation}所示，经自动化清洗后的数据集在综合合格率上达到了 92.6\%。这一结果有力地证明了 VCE-24K 数据集并非由模型随机生成的噪声数据，而是经过严格质量控制的、具备高信噪比的标准化基准。
+\section{本章小结}
+
+本章详细阐述了支撑全流程防御体系的两大关键数据资源。
+首先，构建了包含 71K 条指令的多模态安全检测数据集，通过引入细粒度的风险分类与思维链标注，解决了传统数据集在隐喻攻击与复杂推理任务上的不足。
+其次，针对视频概念擦除任务，提出了一种无需训练的分支生成策略，构建了包含 2.4 万对样本的 VCE-24K 基准数据集，有效克服了视频时空一致性难以对齐的挑战。
+这两部分工作分别解决了“输入端防御练什么”和“模型端防御怎么练”的基础问题，为后续章节的算法实现奠定了坚实基础。

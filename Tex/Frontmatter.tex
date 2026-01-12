@@ -18,18 +18,29 @@
 \setcounter{page}{1}% 开始页码
 \pagenumbering{Roman}% 页码符号
 
-中文摘要、英文摘要、目录、论文正文、参考文献、附录、致谢、攻读学位期间发表的学术论文与其他相关学术成果等均须由另页右页（奇数页）开始。
+随着以 Transformer 为基础的文本生成视频（Text-to-Video）扩散模型取得突破性进展，其生成内容的逼真度与时空连贯性显著提升，但也引发了包括版权侵权、名人身份滥用及暴力色情内容生成在内的严峻安全挑战 。现有的图像级安全防御手段难以适应视频生成任务中高昂的计算成本与复杂的时序一致性要求，且缺乏针对隐晦语义攻击的有效拦截与系统化防御机制 。为此，本文提出了一套面向文生视频模型的全流程安全防御体系，通过构建“生成前置检测—生成中概念擦除—系统化集成应用”的闭环框架，实现高效、可控的安全生成 。本文的主要研究内容与成果如下：
 
-\keywords{中国科学院大学，学位论文，模板}% 中文关键词
+首先，针对输入端恶意提示词具有隐蔽性与多义性的问题，研究了基于大语言模型（LLM）思维链增强的前置安全检测方法 。选用轻量化的 Llama-3.1-3B 作为基座模型，利用参数高效微调（PEFT）技术注入领域安全知识 。设计了“策略即提示（Policy-as-Prompt）”机制与“思维链（Chain-of-Thought）”推理范式，引导模型显式生成推理轨迹，显著增强了对隐喻、暗示等“灰域”风险的上下文感知与逻辑判断能力 。实验表明，该方法在 WildGuard 等基准测试中有效降低了漏检率，提升了对复杂恶意请求的拦截精度 。
+
+其次，针对模型内部已习得的敏感概念与版权形象，提出了一种基于潜空间直接偏好优化（Latent-DPO）的视频概念擦除方法 。该方法摆脱了对视频逐帧像素级解码的依赖，直接在扩散模型的潜空间内构建正负偏好轨迹对去噪过程进行约束，大幅降低了计算开销 。为解决擦除过程中的时空崩塌问题，设计了时空-语义对齐损失（STSA），通过约束交叉注意力机制中的上下文分布，确保在移除目标概念的同时保持视频的时序连贯性与非目标语义的完整性 。此外，构建了包含 24,000 对样本的视频概念偏好数据集 VCE-24K，为相关研究提供了标准化的训练与评测基准 。实验结果显示，该方法在 CLIPScore 安全性指标上显著优于现有基线，且在 VBench 视频质量评估中保持了极高的水准 。
+
+最后，基于上述核心算法，设计并实现了一套文生视频全流程安全防御系统 。该系统集成了前置检测模块与安全生成模块，构建了“预检—干预—评测”的三阶段安全闭环 。系统采用前后端分离架构，支持用户交互、实时风险拦截与安全视频生成展示，并在恶意攻击拦截与版权 IP 保护等典型应用场景中验证了其实用性与稳定性 。
+
+\keywords{文生视频模型, 全流程防御, 大语言模型检测, 概念擦除, 直接偏好优化, 时空一致性}% 中文关键词
 %-
 %-> 英文摘要
 %-
 \intobmk\chapter*{Abstract}% 显示在书签但不显示在目录
 
-Chinese abstracts, English abstracts, table of contents, the main contents, references, appendix, acknowledgments, author's resume and academic papers published during the degree study and other relevant academic achievements must start with another right page (odd-numbered page).
-    %- the current style, comment all the lines in plain style definition.
+With the rapid advancement of Transformer-based text-to-video (T2V) diffusion models, the realism and spatiotemporal coherence of generated content have improved significantly. However, these developments also bring severe security challenges, including copyright infringement, misuse of celebrity identities, and the generation of violent or pornographic content. Existing image-level defense mechanisms are difficult to adapt to video generation tasks due to high computational costs and complex temporal consistency requirements; furthermore, they lack effective interception and systematic defense frameworks against subtle semantic attacks. To address these issues, this thesis proposes a comprehensive full-process safety defense system for T2V models. By constructing a closed-loop framework consisting of "Pre-generation Detection," "In-generation Concept Erasure," and "Systematic Integration," this work achieves efficient and controllable safety alignment. The main contributions are as follows:
 
-\KEYWORDS{University of Chinese Academy of Sciences, Thesis, LaTeX Template}% 英文关键词
+First, to address the ambiguity and stealthiness of malicious prompts at the input stage, we investigate a pre-generation safety detection method enhanced by Large Language Model (LLM) reasoning. Using a lightweight Llama-3.1-3B as the base model, we inject domain-specific safety knowledge via Parameter-Efficient Fine-Tuning (PEFT). We design a "Policy-as-Prompt" mechanism and a "Chain-of-Thought (CoT)" reasoning paradigm to guide the model in generating explicit reasoning traces. This approach significantly enhances the model’s contextual awareness and logical judgment for "grey-zone" risks, such as metaphors and insinuations. Experimental results demonstrate that this method effectively reduces the false negative rate and improves interception precision for complex malicious requests.
+
+Second, to mitigate inherent risks within the model’s learned knowledge (e.g., sensitive concepts and copyrighted IPs), we propose a video concept erasure method based on Latent Direct Preference Optimization (Latent-DPO). By bypassing the need for frame-by-frame pixel-level decoding, our method constructs positive and negative preference trajectories directly within the latent space of the diffusion model to constrain the denoising process, significantly reducing computational overhead. To prevent spatiotemporal collapse during erasure, we introduce a Spatiotemporal-Semantic Alignment (STSA) loss, which maintains temporal consistency and the integrity of non-target semantics by constraining the context distribution in cross-attention mechanisms. Furthermore, we contribute VCE-24K, the first training-free paired video corpus for concept erasure, providing a benchmark for the field. Quantitative evaluations show that our method outperforms baselines in safety metrics (e.g., CLIPScore) while preserving high visual quality on VBench.
+
+Finally, integrating the aforementioned algorithms, we design and implement a full-process safety defense system for text-to-video generation. The system incorporates the pre-detection and concept erasure modules into a three-stage safety loop: "Pre-check, Intervention, and Post-evaluation." Built on a decoupled front-end and back-end architecture, the system supports real-time risk interception and secure video generation. Its practicality and stability are further validated through typical application scenarios, including malicious attack mitigation and intellectual property protection.
+
+\KEYWORDS{Text-to-Video Models, Full-process Defense, LLM-based Detection, Concept Erasure, Direct Preference Optimization, Spatiotemporal Consistency}% 英文关键词
 
 \pagestyle{enfrontmatterstyle}%
 \cleardoublepage\pagestyle{frontmatterstyle}%
