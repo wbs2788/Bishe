@@ -1,0 +1,261 @@
+\chapter{基于潜空间偏好优化的视频概念擦除方法}\label{chap:concept}
+
+\section{引言}\label{sec:introduction}
+
+\section{浅空间内的直接偏好优化}\label{sec:direct_preference_optimization}
+\subsection{问题定义}\label{subsec:problem_definition}
+
+在生成式模型的安全对齐任务中，传统的监督微调（SFT）往往难以精确地将人类复杂的价值观（如“移除版权角色但保留画风”）转化为可优化的损失函数。
+因此，引入基于人类反馈的强化学习（Reinforcement Learning from Human Feedback, RLHF）成为了主流范式。
+然而，标准的基于人类反馈的强化学习流程通常需要训练一个独立的奖励模型（Reward Model），并使用强化学习算法进行在线优化，这在计算成本高昂且训练不稳定的视频生成任务中极难落地。
+直接偏好优化（Direct Preference Optimization, DPO）的提出，通过严谨的数学推导将强化学习问题转化为一个无需显式奖励模型的分类问题，为这一难题提供了优雅的闭式解。
+
+本节将从标准基于人类反馈的强化学习的目标函数出发，推导直接偏好优化算法的理论根基。
+
+\subsubsection{基于人类反馈的强化学习的目标函数与最优策略}
+
+在 RLHF 框架中，目标是寻找一个最优策略 $\pi_{\theta}$（即生成的模型），使其在最大化预期奖励的同时，保持与原始参考模型 $\pi_{\text{ref}}$（Reference Model）的分布接近，以防止模型在优化过程中发生模式崩塌或过度偏离预训练的语言或视觉分布。
+该优化问题可以形式化为带有 KL 散度约束的奖励最大化问题：
+\begin{equation}
+\max_{\pi} \mathcal{J}(\pi) = \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi(\cdot|x)} \left[ r^*(x, y) - \beta \mathbb{D}_{\text{KL}}(\pi(\cdot|x) \Vert \pi_{\text{ref}}(\cdot|x)) \right].
+\end{equation}
+其中：$x$ 为输入提示词（Prompt），$y$ 为生成的视频内容；$r^*(x, y)$ 为真实但未知的奖励函数，反映了人类对生成结果的偏好（例如：不含敏感概念的内容奖励高）；$\beta$ 为 KL 散度惩罚系数，用于控制模型偏离参考模型的程度；$\mathbb{D}_{\text{KL}}$ 为 Kullback-Leibler 散度。
+根据凸优化理论，上述目标函数在无参数约束的函数空间内存在唯一的解析解（Closed-form Solution）。通过变分法求解泛函极值，可以得到最优策略 $\pi^*$ 的形式为：
+\begin{equation}\label{eq:optimal_policy}
+\pi^*(y|x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y|x) \exp \left( \frac{1}{\beta} r^*(x, y) \right).
+\end{equation}
+其中，$Z(x) = \sum_y \pi_{\text{ref}}(y|x) \exp(\frac{1}{\beta} r^*(x, y))$ 为配分函数（Partition Function），用于保证概率归一化。
+
+\subsubsection{奖励函数的重参数化}
+
+公式~\ref{eq:optimal_policy}虽然给出了最优策略的形式，但其中包含未知的奖励函数 $r^*(x, y)$ 和难以计算的配分函数 $Z(x)$。
+DPO 的核心洞察在于：既然最优策略与奖励函数存在一一映射关系，反之可以用最优策略来表示奖励函数。
+
+对公式~\ref{eq:optimal_policy} 两边取对数并重排各项，可得：
+\begin{equation}\label{eq:reward_function}
+r^*(x, y) = \beta \log \frac{\pi^*(y|x)}{\pi_{\text{ref}}(y|x)} + \beta \log Z(x).
+\end{equation}
+
+这一步将抽象的奖励具体化为最优策略与参考策略的对数似然比。
+
+\subsubsection{直接偏好优化}
+
+在偏好学习中，通常假设人类的偏好遵循 Bradley-Terry (BT) 模型。
+给定两个生成样本 $y_w$（胜者，Preferred）和 $y_l$（败者，Dispreferred），人类偏好 $y_w \succ y_l$ 的概率由两者奖励差值的 Sigmoid 函数决定：
+\begin{equation}\label{eq:bt_model}
+p(y_w \succ y_l | x) = \sigma(r^*(x, y_w) - r^*(x, y_l)),
+\end{equation}
+其中 $\sigma(z) = \frac{1}{1 + e^{-z}}$ 为 Logistic 函数。
+
+将公式~\ref{eq:reward_function} 代入公式~\ref{eq:bt_model} 中的奖励差值项 $r^*(x, y_w) - r^*(x, y_l)$。
+此时，配分函数项 $\beta \log Z(x)$ 由于与 $y$ 无关，在相减过程中被抵消：
+\begin{equation}\label{eq:reward_difference}
+r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi^*(y_l|x)}{\pi_{\text{ref}}(y_l|x)}.
+\end{equation}
+
+这一结果表明，人类的偏好概率可以直接由策略模型 $\pi^*$ 来表达，而无需显式建模奖励函数 $r^*$。
+因此，将参数化的模型 $\pi_\theta$ 视为对最优策略 $\pi^*$ 的逼近，通过最大化偏好数据的对数似然，即可直接优化策略模型。
+最终，DPO 的目标函数定义为：
+\begin{equation}\label{eq:dpo_objective}
+\mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \right) \right].
+\end{equation}
+
+通过上述推导，证明了直接偏好优化实际上是在隐式地优化一个满足 KL 约束的奖励最大化问题。
+该方法避免了训练奖励模型带来的偏差传递和强化学习算法中复杂的超参数调优，具有训练稳定、收敛速度快且易于实现的理论优势。
+这为高维视频潜空间中的概念擦除提供了坚实的数学基础。
+
+\subsection{扩散模型中的直接偏好优化}\label{subsec:dpo_diffusion}
+直接偏好优化最初是为大语言模型（LLMs）等自回归生成模型设计的。
+在大语言模型的语境下，模型输出被定义为离散 Token 序列的联合概率分布，其对数似然 $\log \pi_\theta(y|x)$ 可以通过链式法则精确计算为所有 Token 预测概率的对数之和。
+然而，直接将 DPO 范式迁移至视频扩散模型面临着根本性的数学挑战。
+
+\subsubsection{从“下一个令牌预测”到“去噪预测”的范式转换}
+
+视频扩散模型（如 Wan-2.1）是在连续的高维潜空间内通过去噪过程生成数据，而非离散的 Token 预测。
+对于扩散模型而言，直接计算生成样本 $V$ 的精确对数似然 $\log \pi_\theta(V|c)$ 是不可解的，因为这需要对所有可能的反向去噪轨迹进行积分。
+为了解决这一难题，基于扩散模型的变分下界（Evidence Lower Bound, ELBO）理论进行适配。
+根据去噪分数匹配（Denoising Score Matching）理论，扩散模型在时间步 $t$ 的去噪均方误差（MSE）可以视为该时刻负对数似然的变分上界。
+具体而言，对于给定条件 $c$ 和加噪潜变量 $z_t$，模型的对数概率与去噪误差存在如下近似关系：
+\begin{equation}
+    \log \pi_\theta(V|c) \approx - \mathbb{E}_{t, \epsilon} \left[ \omega(t) \| \epsilon - \epsilon_\theta(z_t, t, c) \|_2^2 \right] + C,
+\end{equation}
+其中，$\epsilon$ 为高斯噪声，$\epsilon_\theta$ 为模型预测噪声，$\omega(t)$ 为时间加权系数，$C$ 为常数项。
+
+这一关系揭示了 DPO 适配的核心机制：模型生成概率的对数比（Log-ratio）可以转化为去噪误差的差值。
+即，如果模型 $\pi_\theta$ 比参考模型 $\pi_{\text{ref}}$ 更倾向于生成样本 $V$，意味着 $\pi_\theta$ 在重建 $V$ 时的去噪误差应小于 $\pi_{\text{ref}}$ 的去噪误差。
+
+\subsubsection{扩散偏好损失函数的定义}
+
+基于上述理论，将 DPO 的优化目标从概率空间映射到去噪误差空间。
+对于成对的视频样本——优选样本 $V_w$（Winner，即去除概念后的视频）和厌恶样本 $V_l$（Loser，即包含概念的视频），将扩散模型的偏好损失函数定义为：
+\begin{equation}\label{eq:dpo_loss}
+\mathcal{L}_{DPO} = -\log \sigma \left( \beta \left( \log \frac{\pi_\theta(V_w|c)}{\pi_{ref}(V_w|c)} - \log \frac{\pi_\theta(V_l|c)}{\pi_{ref}(V_l|c)} \right) \right).
+\end{equation}
+在实际训练中，公式中的对数概率项由去噪均方误差误差项替代。具体地，定义隐式奖励差值（Implicit Reward Margin）$\Delta$ 为：
+\begin{equation}\label{eq:implicit_reward_margin}
+\Delta = \underbrace{\left( \| \epsilon - \epsilon_\theta(z_t, V_w) \|^2 - \| \epsilon - \epsilon_{\text{ref}}(z_t, V_w) \|^2 \right)}_{\text{优选样本的相对改善}} - \underbrace{\left( \| \epsilon - \epsilon_\theta(z_t, V_l) \|^2 - \| \epsilon - \epsilon_{\text{ref}}(z_t, V_l) \|^2 \right)}_{\text{厌恶样本的相对改善}}.
+\end{equation}
+公式~\ref{eq:dpo_loss}的物理意义极为直观，$\pi_\theta(V_w|c)$ 与 $\pi_\theta(V_l|c)$分别代表当前模型生成优选视频和厌恶视频的概率（通过去噪误差负相关度量）。$\pi_{\text{ref}}$：作为正则化项（Reference），防止模型在优化过程中过度偏离预训练的先验分布，保证生成视频的结构合理性。$\beta$：温度系数（超参数），控制偏好优化的强度。通过最小化该损失函数，迫使模型在潜空间中调整去噪轨迹：降低优选样本 $V_w$（无概念）的去噪误差，同时增大厌恶样本 $V_l$（有概念）的去噪误差。这实现了在不进行像素级解码的情况下，直接在模型参数层面擦除特定的语义概念。
+
+通过最小化该损失函数，迫使模型在潜空间中调整去噪轨迹：降低优选样本 $V_w$（无概念）的去噪误差，同时增大厌恶样本 $V_l$（有概念）的去噪误差。这实现了在不进行像素级解码的情况下，直接在模型参数层面擦除特定的语义概念。
+
+\subsection{浅空间免解码优化策略}\label{subsec:free_form_optimization}
+
+在传统的图像或视频概念擦除方法（如 ESD, UCE）中，通常需要将潜变量解码为像素图像，计算视觉损失（如物体检测 loss 或身份 ID loss），再将梯度反向传播回扩散模型。
+对于视频生成任务而言，这种“解码-计算-回传”的路径极其昂贵。
+视频变分自编码器（Video VAE）通常包含复杂的 3D 卷积层，单次解码的显存占用和计算开销是潜空间推理的数倍，且极易导致梯度在长时序传导中消失或爆炸。
+
+针对这一痛点，本文提出了潜空间免解码优化策略。
+概念擦除本质上是一个轨迹级的分布重塑问题，而非单帧的像素级修复。
+因此直接在 DiT 的潜空间内，通过对比去噪轨迹的优劣来更新模型，完全避免了高昂的视频解码过程。
+
+\subsubsection{教师-学生架构}
+为了实现稳定的偏好优化，构建了一个教师-学生对齐架构。
+
+\begin{itemize}
+    \item \textbf{教师模型 (Teacher Model, $\theta_0$)}：即原始的预训练 Wan-2.1 模型。
+    在训练过程中，教师模型的参数全程冻结。其作用是作为参考锚点（Reference Anchor），提供原始的去噪能力基准，防止学生模型在擦除概念时破坏视频的基础生成质量（如光影、物理规律）。
+    \item \textbf{学生模型 (Student Model, $\theta$)}：即待优化的模型。
+    为了保证参数高效性，保持 Wan-2.1 的主体参数冻结，仅在 DiT 注意力模块的 Query 和 Key 投影层插入 Rank-64 的 LoRA 适配器进行更新。
+\end{itemize}
+
+\subsubsection{基于均方误差差分的偏好边际推导}
+给定一个在时间步 $t$ 共享的噪声潜变量 $\mathbf{z}_t \in \mathbb{R}^{(1+T/4)\times H/8\times W/8\times C}$，我们分别输入优选提示词（Concept-free, $x^-$）和厌恶提示词（Concept-bearing, $x^+$）。
+学生模型与教师模型分别输出四个噪声预测值：
+\begin{align}
+    \epsilon^{-}{\text{stu}}    &= \epsilon_{\theta}\bigl(\mathbf{z}_t,t,x^{-}\bigr), &\epsilon^{+}{\text{stu}}    &= \epsilon_{\theta}\bigl(\mathbf{z}_t,t,x^{+}\bigr), \\
+    \epsilon^{-}{\text{teach}} &= \epsilon_{\theta_{0}}\bigl(\mathbf{z}_t,t,x^{-}\bigr), &\epsilon^{+}{\text{teach}} &= \epsilon_{\theta_{0}}\bigl(\mathbf{z}_t,t,x^{+}\bigr).
+\end{align}
+
+根据~\ref{subsec:dpo_diffusion}节的理论，扩散模型的负对数似然与去噪均方误差成正比。因此，我们可以通过计算预测噪声与真实高斯噪声 $\epsilon$ 之间的均方误差来量化模型对当前生成的置信度或偏好度：
+\begin{align}
+    \ell_{\text{stu}}^{+}    &= \Vert \epsilon - \epsilon^{+}{\text{stu}}    \Vert^2, &\ell{\text{stu}}^{-}    &= \Vert \epsilon - \epsilon^{-}{\text{stu}}    \Vert^2, \\
+    \ell{\text{teach}}^{+} &= \Vert \epsilon - \epsilon^{+}{\text{teach}} \Vert^2, &\ell{\text{teach}}^{-} &= \Vert \epsilon - \epsilon^{-}{\text{teach}} \Vert^2.
+\end{align}
+
+为了消除不同噪声水平下的尺度差异，我们引入教师归一化边际 $m$。
+它衡量了学生模型相对于原始教师模型在去噪误差上的变化量：
+\begin{equation}
+    m^{+}=\ell_{\text{stu}}^{+}-\ell_{\text{teach}}^{+},\quad m^{-}=\ell_{\text{stu}}^{-}-\ell_{\text{teach}}^{-}.
+\end{equation}
+
+最终，定义总的偏好差值 $\Delta$ 为：
+\begin{equation}
+    \Delta = m^{+} - m^{-}.
+\end{equation}
+
+上述推导中的 $\Delta$ 具有明确的物理含义：
+\begin{itemize}
+    \item 若 $m^{-} < 0$，意味着学生模型在优选提示词 $x^-$ 上的误差小于教师模型，即学生学到了如何更好地生成无概念视频。
+    \item 若 $m^{+} > 0$，意味着学生模型在厌恶提示词 $x^+$ 上的误差大于教师模型，即学生遗忘了如何生成有概念视频（去噪能力退化）。
+\end{itemize}
+因此，理想的目标是最小化 $\Delta$（使其为负值），即同时实现增强无概念生成与抑制有概念生成。
+
+将 $\Delta$ 代入 Sigmoid 函数，得到最终的 Latent DPO 损失函数：
+\begin{equation}
+    \mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Bigl(-\frac{\beta}{2}\Delta\Bigr),
+\end{equation}
+其中 $\beta$（取值为 0.1）为逆温度系数，用于控制偏好分布的锐度。该损失函数通过简单的二元分类逻辑，驱动模型在潜空间轨迹上发生偏转，使其在面对 $x^+$ 时产生高去噪误差（从而生成模糊或无效内容），而在面对 $x^-$ 时保持或提升生成质量。
+
+\section{时空-语义对齐损失函数}\label{sec:spatiotemporal_semantic_alignment}
+
+在将概念擦除技术从静态图像迁移至动态视频的过程中，最棘手的挑战在于维持时空一致性（Spatiotemporal Consistency）。
+图像擦除方法（如 ESD, UCE）只关注图像内的语义修改，若直接将其应用于视频的每一帧，极易导致帧间闪烁（Flickering）或物体运动轨迹的崩塌，无法关注到视频的时序一致性。
+
+为了解决这一问题，本文提出了一种专为视频 DiT 架构设计的时空-语义对齐（Spatiotemporal-Semantic Alignment, STSA）损失函数。
+该机制的核心思想是：在擦除目标概念（如米老鼠的身份特征）的同时，强制模型在潜空间内的注意力上下文（Attention Context）保持不变，从而锁定的视频的物理布局与运动逻辑。
+
+\subsection{DiT 架构中的时空注意力机制}\label{subsec:spatiotemporal_attention}
+
+为了理解时空-语义对齐损失的作用机理，首先需要剖析 Wan-2.1 模型所采用的 Diffusion Transformer (DiT) 架构。
+与传统基于 3D-UNet 的视频生成模型不同，DiT 摒弃了时空分离的卷积归纳偏置，采用了全注意力的序列建模方式。
+\begin{itemize}
+    \item \textbf{3D Token 化与序列展开：}在 Wan-2.1 的 DiT Block 中，输入的含噪视频潜变量 $z_t \in \mathbb{R}^{F \times H \times W \times C}$ 首先被切分为非重叠的 3D 补丁。
+    这些补丁被拉平为一维 Token 序列，其序列长度 $N$ 等于帧数 $F$、高度 $H$、宽度 $W$ 与通道 $C$ 维度上 Token 数量的乘积，即 $N = T \times H \times W$。
+    \item \textbf{全时空注意力编码：}在注意力层中，每一个 Token 都会被投影为查询（Query, $Q$）、键（Key, $K$）和值（Value, $V$）向量。
+    与图像模型仅在空间维度计算注意力不同，视频 DiT 的注意力机制在全时空范围内运作：空间编码（Spatial Encoding）：捕捉帧内的纹理与结构（如“头部在身体上方”）。时间编码（Temporal Encoding）：捕捉帧间的运动与因果（如“第 $t$ 帧的手臂位置与第 $t+1$ 帧的关联”）。
+\end{itemize}
+
+这种全时空注意力机制（Spatiotemporal Attention）使得模型能够生成连贯的动态视频，但也意味着一旦某个 Token 的语义被粗暴修改，可能会引发蝴蝶效应，破坏整个序列的时空结构。
+
+\subsection{交叉注意力上下文的物理意义}
+
+为了精准控制擦除过程，我们关注 DiT 内部的交叉注意力（Cross-Attention）或自注意力模块中的上下文矩阵（Context Matrix）。
+根据 Wan-2.1 的架构特性，我们将注意力上下文 $C$ 定义为基于键（Key）的加权聚合：
+\begin{equation}
+    A = \text{Softmax}\left(\frac{K Q^\top}{\sqrt{d}}\right) \in \mathbb{R}^{N \times N},
+\end{equation}
+注意力图 $A$（Attention Map）编码了视频的结构与布局。
+例如，它决定了第 5 帧的人物应该关注第 4 帧的相同位置（时间连续性）以及周围的背景像素（空间一致性）。
+查询 $Q$（Query Features）编码了该位置的基础语义内容。
+
+\begin{equation}
+    C = A Q \in \mathbb{R}^{N \times d},    
+\end{equation}
+式中矩阵 $C$ 的每一行 $C_i$ 具有明确的物理含义——它代表了在特定的时空位置 $i$，模型为了生成当前特征，从全局序列中聚合了哪些语义信息。
+
+如果在概念擦除过程中，上下文矩阵 $C$ 发生了剧烈变化，这通常意味着发生了以下两种情况之一：
+\begin{itemize}
+    \item 时空结构破坏：注意力图 $A$ 改变，导致物体发生形变、漂移或背景错位。
+    \item 非目标语义丢失：聚合的特征 $Q$ 改变，导致非目标属性（如画风、光影、无关物体）发生了漂移。
+\end{itemize}
+
+因此，保持 $C$ 的稳定性，就是保持视频骨架与背景的稳定性。
+
+\subsection{时空-语义对齐损失}\label{subsec:spatiotemporal_semantic_alignment_loss}
+基于上述洞察，我们设计了时空-语义对齐损失。
+在 Latent-DPO 的训练过程中，对于同一对输入提示词 $(x^+, x^-)$ 和相同的噪声潜变量 $z_t$，我们希望模型在生成无概念视频时，其内部的注意力流向应与生成有概念视频时保持一致。
+时空-语义对齐损失函数形式化定义为：
+\begin{equation}\label{eq:spatiotemporal_semantic_alignment_loss}
+\mathcal{L}_{STSA} = \frac{1}{L \cdot N} \sum_{l=1}^{L} \Vert C^{(l)}(z_t, x^+) - C^{(l)}(z_t, x^-)\Vert_2^2,
+\end{equation}
+其中，$L$ 为 DiT 的层数，$N$ 为时空 Token 总数。
+
+时空-语义对齐损失的逻辑与作用机理如下：
+\begin{itemize}
+    \item 约束布局与时序：通过最小化 $\Vert C^+ - C^-\Vert^2$，强迫学生模型在处理 $x^-$（无概念提示）时，复用 $x^+$（有概念提示）所建立的时空注意力模式。这意味着，如果原视频中米老鼠在画面左侧向右走，那么擦除后的视频中，新生成的角色也必须在左侧向右走，且步伐节奏完全一致。
+    \item 解耦概念与结构：Latent-DPO 损失函数 ($\mathcal{L}_{DPO}$) 负责推动模型修改值投影（即改变画出来是什么），从而移除目标概念；而时空-语义对齐损失损失函数 ($\mathcal{L}_{STSA}$) 负责保持注意力图和查询聚合（即保持“在哪里画”和“怎么动”）。
+    \item 正则化作用：时空-语义对齐损失有效防止了 LoRA 参数在优化过程中发生过拟合，避免了因 DPO 信号过强而导致的视频画质崩塌（Mode Collapse），确保了擦除操作的精准度。
+\end{itemize}
+
+通过结合 $\mathcal{L}_{DPO}$ 和 $\mathcal{L}_{STSA}$，实现了在移除有害概念的同时，完美保留视频的时空一致性。
+
+\section{算法实现与训练策略}
+
+本节将深入阐述 Latent-DPO 算法在 Wan-2.1 视频扩散模型上的具体实现细节。
+针对视频生成模型参数量巨大且计算开销高昂的特点，我们设计了基于低秩自适应（LoRA）的微调策略，并构建了多目标联合优化框架，在保证算法有效性的同时，显著降低了训练资源需求。
+
+\subsection{基于低秩自适应的微调机制}
+
+在第 3.2.2 节中，我们介绍了 LoRA 的基本原理。然而，与 LLM 的文本生成任务不同，针对 Wan-2.1 视频扩散模型的概念擦除任务涉及对高维视觉流形的重塑。因此，本节针对视频生成的特性，重新设计了 LoRA 的注入位置与容量配置。
+
+\textbf{（1）基于 Q/K 投影的注意力导向重塑}与第三章针对 LLM 微调 $W_q, W_v$ 不同，在视频 DiT 的概念擦除中，我们将 LoRA 适配器精确注入到自注意力与交叉注意力模块的查询（Query, $W_q$）与键（Key, $W_k$）投影层。
+这一差异化设计的理论依据在于：
+\begin{itemize}
+    \item \textbf{改变“看哪里”而非“画什么”}：Query 和 Key 的点积决定了注意力图（Attention Map），即决定了模型在生成当前 Token 时应该“关注”哪些时空信息（Routing Policy）。
+    我们的目标是阻断模型对特定概念（如米老鼠特征）的注意力聚合，而非破坏其基础的纹理生成能力。
+    \item \textbf{保护生成画质}：Value 投影层通常直接编码了视觉内容的纹理与色彩信息。
+    冻结 $W_v$ 层有助于最大程度保留预训练模型的高质量图像生成能力，防止因过度优化 DPO 目标而导致视频画质崩塌或风格漂移。
+\end{itemize}
+
+\textbf{（2）容量权衡与秩的选择}视频生成的潜空间维度远高于文本空间，且概念擦除任务要求模型“违背”其预训练的先验分布，这对参数容量提出了更高要求。经过消融实验验证（详见 4.5 节），我们将秩设定为 $r=64$，显著高于检测任务的设置（$r=16$）。
+
+\begin{itemize}
+    \item \textbf{为何需要高秩}：过低的秩会导致参数空间受限，难以拟合复杂的概念边界，导致擦除不彻底（Under-fitting）。
+    \item \textbf{避免过拟合}：过高的秩则会引入过多的可训练参数，增加了对非目标概念的误伤风险。
+\end{itemize}
+
+$r=64$ 在擦除效能与模型稳定性之间取得了最佳平衡，此时可训练参数量约为 200M，相对于 Wan-2.1 1.3B 的主体参数依然保持了较高的参数效率。
+
+\subsection{多目标联合优化函数}
+
+为了在移除有害概念的同时维持视频的时空连贯性，我们将潜空间偏好损失 $\mathcal{L}_{DPO}$ 与时空-语义对齐损失 $\mathcal{L}_{STSA}$ 结合，构建了如下的多目标联合优化函数：
+\begin{equation}
+    \mathcal{L}_{\text{total}} = \lambda_{DPO} \mathcal{L}_{DPO} + \lambda_{STSA} \mathcal{L}_{STSA}.
+\end{equation}
+
+在多目标优化中，梯度的量级平衡至关重要。我们将 $\lambda_{DPO}$ 设定为 1.0，作为主导优化方向，驱动模型参数向“遗忘概念”的区域更新。
+我们将 $\lambda_{STSA}$ 设定为 0.1。
+这一系数设定的依据源于实验观察，注意力上下文的 L2 范数（$\mathcal{L}_{STSA}$ 的量级）通常比 DPO 的对数几率损失高出一个数量级。
+将 $\lambda_{STSA}$ 设为 0.1 能够将两项损失拉至同一数值尺度（Numerical Scale），避免对齐损失主导梯度方向从而阻碍概念的有效擦除。
+
