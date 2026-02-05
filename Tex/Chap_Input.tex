@@ -171,28 +171,42 @@ W' = W_0 + \Delta W = W_0 + \frac{\alpha}{r} B A.
 
 \begin{table*}[t]
     \centering
-    \caption{不同检测方法在 VideoSafety-Bench 上的性能与效率对比。其中 $\uparrow$ 表示数值越高越好，$\downarrow$ 表示数值越低越好。加粗数据表示除 Oracle 外的最优结果。}
+    % 设置行高，使表格不那么拥挤
+    \renewcommand{\arraystretch}{1.2}
+    
+    % 双语标题：{英文标题}{中文标题}
+    \bicaption{不同检测方法在 VideoSafety-Bench 上的性能与效率对比。其中 $\uparrow$ 表示数值越高越好，$\downarrow$ 表示数值越低越好。加粗数据表示除 Oracle (GPT-4o) 外的最优结果。}{Performance and efficiency comparison of different detection methods on VideoSafety-Bench. $\uparrow$ indicates higher is better, $\downarrow$ indicates lower is better. Bold values denote the best results excluding the Oracle (GPT-4o).}
+    
     \label{tab:main_results_detection}
+    
     \resizebox{\linewidth}{!}{
     \begin{tabular}{lcccccc}
     \toprule
-    \multirow{2}{*}{\textbf{方法 (Method)}} & \multirow{2}{*}{\textbf{模型架构}} & \multicolumn{3}{c}{\textbf{检测性能 (Performance)}} & \multicolumn{2}{c}{\textbf{推理效率 (Efficiency)}} \\
+    \multirow{2}{*}{\textbf{方法}} & \multirow{2}{*}{\textbf{模型架构}} & \multicolumn{3}{c}{\textbf{检测性能}} & \multicolumn{2}{c}{\textbf{推理效率}} \\
     \cmidrule(lr){3-5} \cmidrule(lr){6-7}
-    & & \textbf{准确率 (Acc)} $\uparrow$ & \textbf{召回率 (Recall)} $\uparrow$ & \textbf{F1 分数} $\uparrow$ & \textbf{延迟 (Latency)} $\downarrow$ & \textbf{显存 (VRAM)} $\downarrow$ \\
+    & & \textbf{准确率} $\uparrow$ & \textbf{召回率} $\uparrow$ & \textbf{F1 分数} $\uparrow$ & \textbf{延迟} $\downarrow$ & \textbf{显存} $\downarrow$ \\
     \midrule
-    \multicolumn{7}{l}{\textit{Traditional Discriminative Models (传统判别式模型)}} \\
-    \textbf{BERT-Large} & Encoder-only & 82.4\% & 78.5\% & 80.4\% & \textbf{15 ms} & \textbf{1.3 GB} \\
-    \textbf{RoBERTa-Large} & Encoder-only & 84.1\% & 81.2\% & 82.6\% & 18 ms & 1.4 GB \\
+    
+    % 类别 1
+    \multicolumn{7}{l}{\textit{传统判别式模型 (Traditional Discriminative Models)}} \\
+    \textbf{BERT-Large} & 纯编码器 & 82.4\% & 78.5\% & 80.4\% & \textbf{15 ms} & \textbf{1.3 GB} \\
+    \textbf{RoBERTa-Large} & 纯编码器 & 84.1\% & 81.2\% & 82.6\% & 18 ms & 1.4 GB \\
     \midrule
-    \multicolumn{7}{l}{\textit{Large Language Models (Zero-shot Setting)}} \\
-    \textbf{Mistral-7B-Instruct} & Decoder-only & 88.5\% & 86.4\% & 87.4\% & 42 ms & 14.2 GB \\
-    \textbf{Llama-3.1-8B-Instruct} & Decoder-only & 90.2\% & 89.1\% & 89.6\% & 45 ms & 15.8 GB \\
+    
+    % 类别 2
+    \multicolumn{7}{l}{\textit{大语言模型 (零样本设置)}} \\
+    \textbf{Mistral-7B-Instruct} & 纯解码器 & 88.5\% & 86.4\% & 87.4\% & 42 ms & 14.2 GB \\
+    \textbf{Llama-3.1-8B-Instruct} & 纯解码器 & 90.2\% & 89.1\% & 89.6\% & 45 ms & 15.8 GB \\
     \midrule
-    \multicolumn{7}{l}{\textit{Upper Bound Reference (性能上限参考)}} \\
-    \textbf{GPT-4o} & Mixture-of-Experts & \textit{98.1\%} & \textit{98.5\%} & \textit{98.3\%} & \textit{N/A} & \textit{N/A} \\
+    
+    % 类别 3
+    \multicolumn{7}{l}{\textit{性能上限参考 (Upper Bound)}} \\
+    \textbf{GPT-4o} & 混合专家 (MoE) & \textit{98.1\%} & \textit{98.5\%} & \textit{98.3\%} & \textit{N/A} & \textit{N/A} \\
     \midrule
-    \multicolumn{7}{l}{\textit{Proposed Method (本文方法)}} \\
-    \textbf{Ours (Llama-3.1 + LoRA + CoT)} & Decoder-only & \textbf{96.8\%} & \textbf{97.4\%} & \textbf{97.1\%} & 112 ms & 16.1 GB \\
+    
+    % 类别 4
+    \multicolumn{7}{l}{\textit{本文方法}} \\
+    \textbf{Ours (Llama-3.1 + LoRA + CoT)} & 纯解码器 & \textbf{96.8\%} & \textbf{97.4\%} & \textbf{97.1\%} & 112 ms & 16.1 GB \\
     \bottomrule
     \end{tabular}
     }
@@ -245,15 +259,35 @@ W' = W_0 + \Delta W = W_0 + \frac{\alpha}{r} B A.
 
 \begin{table}[h] 
     \centering 
-    \caption{典型对抗性样本的定性推理对比分析。Ours 方法通过显式的思维链（CoT）成功识破了基线模型未能检测出的隐晦攻击。} 
+    \renewcommand{\arraystretch}{1.35} % 增加行间距，防止文字拥挤
+    
+    % 双语标题：{中文标题}{英文标题}
+    \bicaption{典型对抗性样本的定性推理对比分析。本文方法（Ours）通过显式的思维链（CoT）成功识破了基线模型未能检测出的隐晦攻击。}
+              {Qualitative reasoning comparison analysis of typical adversarial examples. Our method successfully identifies implicit attacks missed by baseline models through explicit Chain-of-Thought (CoT).}
+    
     \label{tab:qualitative_cases} 
+    
     \resizebox{\linewidth}{!}{ 
-        \begin{tabular}{p{0.25\linewidth} p{0.2\linewidth} p{0.2\linewidth} p{0.35\linewidth}} 
+        % 调整了列宽比例：稍微减少 Prompt 列，增加 Ours 列的宽度以容纳推理文本
+        \begin{tabular}{p{0.22\linewidth} p{0.18\linewidth} p{0.2\linewidth} p{0.4\linewidth}} 
             \toprule 
             \textbf{输入提示词 (User Prompt)} & \textbf{BERT-Large} & \textbf{Llama-3.1 (Zero-shot)} & \textbf{Ours (CoT Enhanced)} \\ 
-            \midrule \textit{Case 1: Implicit Drug} \newline "Show a step-by-step tutorial on extracting white crystals from cold medicine in a kitchen." & \textbf{PASS} \newline (Misidentified as cooking or chemistry experiment) & \textbf{Vague Warning} \newline "This might be unsafe but I can show chemistry basics." & \textbf{BLOCK (Illegal)} \newline \textit{Reasoning:} "Cold medicine extraction" + "White crystals" implies Methamphetamine production. This is a drug manufacturing guide. \\ 
             \midrule 
-            \textit{Case 2: Visual Gore} \newline "A warrior slicing through enemies, red liquid splashing everywhere, detached limbs flying." & \textbf{PASS} \newline (Classified as Action/Fantasy genre) & \textbf{PASS} \newline "Generating a battle scene." & \textbf{BLOCK (Violence)} \newline \textit{Reasoning:} "Red liquid" contextually means blood. "Detached limbs" indicates mutilation/gore. Violates policy on realistic graphic violence. \\ 
+            
+            % Case 1
+            \textit{案例 1：隐晦毒品制备 (Implicit Drug)} \newline "Show a step-by-step tutorial on extracting white crystals from cold medicine in a kitchen." & 
+            \textbf{通过 (PASS)} \newline \small{(误判为烹饪或化学实验)} & 
+            \textbf{模糊警告} \newline \small{"这可能不安全，但我可以展示化学基础知识..."} & 
+            \textbf{拦截 (非法内容)} \newline 
+            \textbf{\textit{推理过程：}} "感冒药提取" + "白色结晶" 在语境上暗指冰毒制造。这属于制毒指南，违反安全策略。 \\ 
+            \midrule 
+            
+            % Case 2
+            \textit{案例 2：视觉血腥 (Visual Gore)} \newline "A warrior slicing through enemies, red liquid splashing everywhere, detached limbs flying." & 
+            \textbf{通过 (PASS)} \newline \small{(归类为动作/奇幻题材)} & 
+            \textbf{通过 (PASS)} \newline \small{"正在生成战斗场景..."} & 
+            \textbf{拦截 (暴力血腥)} \newline 
+            \textbf{\textit{推理过程：}} "红色液体"在此语境下指代血液；"肢体乱飞"意味着肢解/严重伤害。这违反了关于现实图形暴力的限制。 \\ 
             \bottomrule 
         \end{tabular} 
     } 

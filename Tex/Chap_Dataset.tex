@@ -180,6 +180,15 @@
 
 \subsubsection{算法流程详解}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{Img/figure_data_pairconstruction.png}
+    \bicaption{潜空间分支生成算法流程图}{Illustration of Latent Space Branching Generation Algorithm}
+    \label{fig:branching}
+\end{figure}
+
+算法的具体流程如图~\ref{fig:branching}所示。通过在扩散去噪过程中引入分支时刻 $\tau$，我们将生成过程解耦为以下两个阶段：
+
 \textbf{（1）共享轨迹 ($t \in [T, \tau + 1]$)}：在此阶段，正负样本共享完全相同的初始噪声 $z_T$ 和随机噪声序列 $\{\xi_T, \dots, \xi_{\tau+1}\}$。更关键的是，尽管目标是生成两个不同语义的视频，但在这一阶段，我们强制模型仅使用正样本提示词 $c = x^+$ 作为引导条件。
 
 $$z_{t-1}^{(shared)} = \mu_\theta(z_t^{(shared)}, t, x^+) + \sigma_t \xi_t.$$

@@ -107,7 +107,7 @@ r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|
 
 \subsection{浅空间免解码优化策略}\label{subsec:free_form_optimization}
 
-在传统的图像或视频概念擦除方法（如 ESD, UCE）中，通常需要将潜变量解码为像素图像，计算视觉损失（如物体检测 loss 或身份 ID loss），再将梯度反向传播回扩散模型。
+在传统的图像或视频概念擦除方法（如 ESD～\cite{gandikota2023erasing}, UCE~\cite{Gandikota2023UnifiedCE}）中，通常需要将潜变量解码为像素图像，计算视觉损失（如物体检测 loss 或身份 ID loss），再将梯度反向传播回扩散模型。
 对于视频生成任务而言，这种“解码-计算-回传”的路径极其昂贵。
 视频变分自编码器（Video VAE）通常包含复杂的 3D 卷积层，单次解码的显存占用和计算开销是潜空间推理的数倍，且极易导致梯度在长时序传导中消失或爆炸。
 
@@ -117,7 +117,7 @@ r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|
 
 为了实现稳定的偏好优化，本研究构建了一个教师-学生对齐架构。其中，教师模型（Teacher Model, $\theta_0$）由原始的预训练 Wan-2.1 模型初始化，其参数在训练全过程中保持冻结状态。教师模型的核心作用是作为参考锚点（Reference Anchor），提供原始的去噪能力基准，旨在防止学生模型在执行概念擦除任务时破坏视频的基础生成质量，诸如光影渲染与物理规律的合理性。与之相对，学生模型（Student Model, $\theta$）作为待优化的目标网络，采取了参数高效的微调策略。具体而言，Wan-2.1 的主体参数被冻结，仅在 Diffusion Transformer (DiT) 注意力模块的查询（Query）与键（Key）投影层中插入了秩为 64 的低秩自适应适配器进行定向更新。
 
-\subsubsection{基于均方误差差分的偏好边际推导}
+\subsubsection{基于均方误差差分的偏好边际}
 给定一个在时间步 $t$ 共享的噪声潜变量 $\mathbf{z}_t \in \mathbb{R}^{(1+T/4)\times H/8\times W/8\times C}$，分别输入优选提示词（Concept-free, $x^-$）和厌恶提示词（Concept-bearing, $x^+$）。
 学生模型与教师模型分别输出四个噪声预测值：
 \begin{align}
@@ -149,6 +149,16 @@ r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|
     \mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Bigl(-\frac{\beta}{2}\Delta\Bigr),
 \end{equation}
 其中 $\beta$（取值为 0.1）为逆温度系数，用于控制偏好分布的锐度。该损失函数通过简单的二元分类逻辑，驱动模型在潜空间轨迹上发生偏转，使其在面对 $x^+$ 时产生高去噪误差（从而生成模糊或无效内容），而在面对 $x^-$ 时保持或提升生成质量。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{Img/diffusiondpo.png}
+    \bicaption{DPO 扩散偏好损失函数示意图}{Illustration of the DPO diffusion preference loss function.}
+    \label{fig:dpo_diffusion}
+\end{figure}
+
+如图~\ref{fig:dpo_diffusion}所示，该示意图直观地展示了通过计算学生模型与教师模型在优选和厌恶样本上的去噪误差差分，进而构建偏好损失并引导模型优化的完整流程。
+
 
 \section{时空-语义对齐损失函数}\label{sec:spatiotemporal_semantic_alignment}
 
@@ -199,6 +209,15 @@ r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|
 该损失函数的作用机理主要体现在三个维度。首先，通过最小化上下文矩阵的差异，算法约束了视频的布局与时序演化。这引导学生模型在处理无概念提示词时，能够复用由有概念提示词建立的时空注意力模式。具体而言，若原视频中主体在画面特定区域进行定向移动，擦除后的视频中生成的新角色须遵循完全一致的运动轨迹与节奏。其次，该机制实现了概念与结构的有效解耦。潜空间偏好优化损失函数主要驱动模型修改值投影矩阵，即改变生成的具体语义内容以移除目标概念。与之配合，时空-语义对齐损失函数则负责锁定注意力图与查询聚合状态，从而维持生成内容的物理位置与运动逻辑不变。最后，该损失函数发挥了关键的正则化作用。它有效抑制了低秩自适应参数在优化过程中的过拟合倾向，避免了因偏好优化信号过强而导致的模式崩塌，从而确保了擦除操作在维持视频画质前提下的精准度。
 
 通过结合 $\mathcal{L}_{DPO}$ 和 $\mathcal{L}_{STSA}$，实现了在移除有害概念的同时，完美保留视频的时空一致性。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{Img/stsa.png}
+    \bicaption{时空-语义对齐损失函数示意图}{Illustration of the spatial-temporal semantic alignment loss function}
+    \label{fig:stsa_loss}
+\end{figure}
+
+如图~\ref{fig:stsa_loss}所示，该示意图展示了时空-语义对齐损失如何通过约束不同提示词下的注意力上下文，确保视频在概念擦除过程中的结构稳定性。
 
 \section{算法实现与训练策略}
 
