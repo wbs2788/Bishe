@@ -30,7 +30,7 @@
 \begin{equation}\label{eq:optimal_policy}
 \pi^*(y|x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y|x) \exp \left( \frac{1}{\beta} r^*(x, y) \right).
 \end{equation}
-其中，$Z(x) = \sum_y \pi_{\text{ref}}(y|x) \exp(\frac{1}{\beta} r^*(x, y))$ 为配分函数（Partition Function），用于保证概率归一化。
+其中，$Z(x) = \sum_y \pi_{\text{ref}}(y|x) \exp(\frac{1}{\beta} r^*(x, y))$ 为配分函数（Partition Function），用于保证概率归一化。~\cite{sutton1998reinforcement}
 
 \subsubsection{奖励函数的重参数化}
 
@@ -42,11 +42,11 @@ DPO 的核心洞察在于：既然最优策略与奖励函数存在一一映射�
 r^*(x, y) = \beta \log \frac{\pi^*(y|x)}{\pi_{\text{ref}}(y|x)} + \beta \log Z(x).
 \end{equation}
 
-这一步将抽象的奖励具体化为最优策略与参考策略的对数似然比。
+这一步将抽象的奖励具体化为最优策略与参考策略的对数似然比。~\cite{schulman2017proximal}
 
 \subsubsection{直接偏好优化}
 
-在偏好学习中，通常假设人类的偏好遵循 Bradley-Terry (BT) 模型。
+在偏好学习中，通常假设人类的偏好遵循 Bradley-Terry (BT) 模型。~\cite{sutton1998reinforcement}
 给定两个生成样本 $y_w$（胜者，Preferred）和 $y_l$（败者，Dispreferred），人类偏好 $y_w \succ y_l$ 的概率由两者奖励差值的 Sigmoid 函数决定：
 \begin{equation}\label{eq:bt_model}
 p(y_w \succ y_l | x) = \sigma(r^*(x, y_w) - r^*(x, y_l)),
@@ -61,7 +61,7 @@ r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|
 
 这一结果表明，人类的偏好概率可以直接由策略模型 $\pi^*$ 来表达，而无需显式建模奖励函数 $r^*$。
 因此，将参数化的模型 $\pi_\theta$ 视为对最优策略 $\pi^*$ 的逼近，通过最大化偏好数据的对数似然，即可直接优化策略模型。
-最终，DPO 的目标函数定义为：
+最终，DPO~\cite{rafailov2023direct} 的目标函数定义为：
 \begin{equation}\label{eq:dpo_objective}
 \mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \right) \right].
 \end{equation}
@@ -101,7 +101,7 @@ r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|
 \begin{equation}\label{eq:implicit_reward_margin}
 \Delta = \underbrace{\left( \| \epsilon - \epsilon_\theta(z_t, V_w) \|^2 - \| \epsilon - \epsilon_{\text{ref}}(z_t, V_w) \|^2 \right)}_{\text{优选样本的相对改善}} - \underbrace{\left( \| \epsilon - \epsilon_\theta(z_t, V_l) \|^2 - \| \epsilon - \epsilon_{\text{ref}}(z_t, V_l) \|^2 \right)}_{\text{厌恶样本的相对改善}}.
 \end{equation}
-公式~\ref{eq:dpo_loss}的物理意义极为直观，$\pi_\theta(V_w|c)$ 与 $\pi_\theta(V_l|c)$分别代表当前模型生成优选视频和厌恶视频的概率（通过去噪误差负相关度量）。$\pi_{\text{ref}}$：作为正则化项（Reference），防止模型在优化过程中过度偏离预训练的先验分布，保证生成视频的结构合理性。$\beta$：温度系数（超参数），控制偏好优化的强度。通过最小化该损失函数，迫使模型在潜空间中调整去噪轨迹：降低优选样本 $V_w$（无概念）的去噪误差，同时增大厌恶样本 $V_l$（有概念）的去噪误差。这实现了在不进行像素级解码的情况下，直接在模型参数层面擦除特定的语义概念。
+公式~\ref{eq:dpo_loss}的物理意义极为直观，$\pi_\theta(V_w|c)$ 与 $\pi_\theta(V_l|c)$分别代表当前模型生成优选视频和厌恶视频的概率（通过去噪误差负相关度量）。$\pi_{\text{ref}}$：作为正则化项（Reference），防止模型在优化过程中过度偏离预训练的先验分布，保证生成视频的结构合理性。$\beta$：温度系数（超参数），控制偏好优化的强度。通过最小化该损失函数，迫使模型在潜空间中调整去噪轨迹：降低优选样本 $V_w$（无概念）的去噪误差，同时增大厌恶样本 $V_l$（有概念）的去噪误差。这实现了在不进行像素级解码的情况下，直接在模型参数层面擦除特定的语义概念。~\cite{wallace2024diffusion}
 
 通过最小化该损失函数，迫使模型在潜空间中调整去噪轨迹：降低优选样本 $V_w$（无概念）的去噪误差，同时增大厌恶样本 $V_l$（有概念）的去噪误差。这实现了在不进行像素级解码的情况下，直接在模型参数层面擦除特定的语义概念。
 
@@ -201,7 +201,7 @@ r^*(x, y_w) - r^*(x, y_l) = \beta \log \frac{\pi^*(y_w|x)}{\pi_{\text{ref}}(y_w|
 基于上述理论洞察，本研究构建了时空-语义对齐损失函数。在潜空间偏好优化的训练进程中，针对同一对输入提示词与共享的噪声潜变量，模型生成无概念视频时的内部注意力流向应当与生成有概念视频时保持严格的同构性。该损失函数的形式化定义如下：
 
 \begin{equation}\label{eq:spatiotemporal_semantic_alignment_loss}
-\mathcal{L}*{STSA} = \frac{1}{L \cdot N} \sum*{l=1}^{L} \Vert C^{(l)}(z_t, x^+) - C^{(l)}(z_t, x^-)\Vert_2^2
+\mathcal{L}*{STSA} = \frac{1}{L \cdot N} \sum_{l=1}^{L} \Vert C^{(l)}(z_t, x^+) - C^{(l)}(z_t, x^-)\Vert_2^2
 \end{equation}
 
 其中， 代表 DiT 模型的网络层数， 则表示时空令牌的总量。
@@ -268,10 +268,10 @@ $r=64$ 在擦除效能与模型稳定性之间取得了最佳平衡，此时可�
 在安全性评估维度，实验采用 CLIPScore 作为核心指标以量化概念擦除的有效性。该指标基于 CLIP 视觉-语言预训练模型~\cite{Radford2021LearningTV}，旨在度量生成内容与目标概念在语义空间中的重叠程度。形式化地，给定生成的视频序列 $V = \{v_1, v_2, \dots, v_T\}$ 以及描述目标概念的提示词文本 $c$，单个视频帧 $v_t$ 的语义相关度得分 $S_{\text{CLIP}}(v_t, c)$ 被定义为图像嵌入向量 $E_I(v_t)$ 与文本嵌入向量 $E_T(c)$ 之间的余弦相似度：
 
 \begin{equation}
-    S_{\text{CLIP}}(v_t, c) = \frac{E_I(v_t) \cdot E_T(c)}{|E_I(v_t)|2 |E_T(c)|2} \times 100.
+    S_{\text{CLIP}}(v_t, c) = \frac{E_I(v_t) \cdot E_T(c)}{||E_I(v_t)||_2 ||E_T(c)||_2} \times 100.
 \end{equation}
 
-得分越低，意味着生成的视频内容与目标概念的语义距离越远，即擦除效果越显著。鉴于简单的平均相似度可能掩盖偶发的擦除失效情况，实验在汇报全序列平均得分 $S{\text{avg}} = \frac{1}{T}\sum{t=1}^{T} S_{\text{CLIP}}(v_t, c)$ 之外，额外引入了前百分之一的极端高分指标 $S_{\text{top1\%}}$。该指标通过计算所有测试样本帧级得分分布的第 99 百分位数值获得。数学上，它能够敏锐地捕捉到视频序列中残留的最强概念特征，实质上衡量了最坏情况下的隐私泄漏或版权侵权风险，从而为安全评估提供了更为严苛的底线保障。
+得分越低，意味着生成的视频内容与目标概念的语义距离越远，即擦除效果越显著。鉴于简单的平均相似度可能掩盖偶发的擦除失效情况，实验在汇报全序列平均得分 $S{\text{avg}} = \frac{1}{T}\sum_{t=1}^{T} S_{\text{CLIP}}(v_t, c)$ 之外，额外引入了前百分之一的极端高分指标 $S_{\text{top1\%}}$。该指标通过计算所有测试样本帧级得分分布的第 99 百分位数值获得。数学上，它能够敏锐地捕捉到视频序列中残留的最强概念特征，实质上衡量了最坏情况下的隐私泄漏或版权侵权风险，从而为安全评估提供了更为严苛的底线保障。
 
 针对生成视频的实用性与画质评估，本研究首先引入 DOVER 评分模型~\cite{wu2023dover}。该模型作为一种无参考视频质量评估方法，采用了双流网络架构从美学观感与技术质量两个互补视角对视频进行打分。其中美学评分侧重于通过自适应的主观感知模块评估构图、光影与色彩表达的艺术性，而技术评分则专注于量化分辨率、噪点水平以及画面的清晰度。这一双重视角确保了模型在移除特定概念后，并未因参数微调而导致整体视觉体验的退化。
 
@@ -281,7 +281,7 @@ $r=64$ 在擦除效能与模型稳定性之间取得了最佳平衡，此时可�
 
 \begin{table*}[t]
     \centering
-    \caption{不同方法在 VCE-24K 测试集上的综合性能评估。本表涵盖安全性、视觉美学、视频质量及文本一致性四个维度。其中 $\downarrow$ 表示数值越低越好，$\uparrow$ 表示数值越高越好。加粗数据表示在同类比较中的最优结果（不包含参考组）。}
+    \bicaption{不同方法在 VCE-24K 测试集上的综合性能评估}{Comprehensive performance evaluation of different methods on the VCE-24K test set}
     \label{tab:main_results}
     \resizebox{\linewidth}{!}{
     \begin{tabular}{lcccccccccc}
@@ -318,7 +318,7 @@ $r=64$ 在擦除效能与模型稳定性之间取得了最佳平衡，此时可�
 
 \begin{table}[t]
     \centering
-    \caption{LoRA 低秩矩阵维度（Rank）对擦除效能与生成质量的敏感性分析。数据表明 Rank=64 是平衡安全性与画质的最佳选择。}
+    \bicaption{LoRA 低秩矩阵维度（Rank）对擦除效能与生成质量的敏感性分析}{Sensitivity analysis of LoRA rank on erasure efficacy and generation quality.}
     \label{tab:ablation_rank}
     \resizebox{0.85\linewidth}{!}{
     \begin{tabular}{lcccc}
@@ -347,7 +347,7 @@ $r=64$ 在擦除效能与模型稳定性之间取得了最佳平衡，此时可�
 \subsection{用户主观评测}
 \begin{table}[t]
 \centering
-\caption{双盲用户主观评测结果。HCR (Human Concept Recall) 衡量人类对目标概念的识别率，HLR@4 (High-Confidence Leakage) 衡量高置信度泄漏，MOS 为视频整体质量平均意见分（1-5分）。}
+\bicaption{双盲用户主观评测结果}{Subjective evaluation results of double-blind user study.}
 \label{tab:user_study}
 \resizebox{\linewidth}{!}{
 \begin{tabular}{lcccc}
