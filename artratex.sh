@@ -6,13 +6,13 @@ set -e
 #-                          <By Huangrui Mo>                               -#
 #- Copyright (C) Huangrui Mo <huangrui.mo@gmail.com>                       -#
 #- This is free software: you can redistribute it and/or modify it         -#
-#- under the terms of the GNU General Public License as published by       -#
+#- under the terms of 、、、、he GNU General Public License as published by       -#
 #- the Free Software Foundation, either version 3 of the License, or       -#
 #- (at your option) any later version.                                     -#
 #---------------------------------------------------------------------------#
 
 #---------------------------------------------------------------------------#
-#->> Preprocessing
+#->> Preprocessing·
 #---------------------------------------------------------------------------#
 #-
 #-> Get source filename
@@ -108,3 +108,18 @@ echo "--------------------------------------------------------------------------
 echo "$TexCompiler $BibCompiler "$FileName".tex finished..."
 echo "---------------------------------------------------------------------------"
 
+#---------------------------------------------------------------------------#
+#->> Word Count (Added)
+#---------------------------------------------------------------------------#
+if command -v texcount >/dev/null 2>&1; then
+    echo "正在进行全文字数统计 (Character Count)..."
+    # -chinese: 统计中文字符
+    # -inc: 递归统计所有 \include 和 \input 的子文件
+    # -total: 汇总结果
+    # -utf8: 强制编码
+    # -brief: 简明输出
+    
+    texcount -chinese -inc -total -utf8 -brief "$FileName".tex
+else
+    echo "提示: 系统未找到 texcount，请确保已安装 TeX Live 或 MiKTeX 全量版。"
+fi
